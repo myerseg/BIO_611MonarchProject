@@ -1,0 +1,416 @@
+---
+title: "FinalProjectTake2"
+author: "Emily Myers"
+date: "`r Sys.Date()`"
+output: html_document
+---
+```{r libraries & read in WMC data}
+library(tidyverse)
+library(car)
+
+WMC.data2 <- read.csv("/Users/emilymyers/Documents/Spring24/BIO_611/ButterflyProject/XercesSociety_WMC_Data_3.19.2024.csv")
+
+WMC.data2
+```
+```{r filter out counties not in california }
+cali_data <- WMC.data2 %>% 
+  filter(COUNTY %in% c("Mendocino", "Sonoma", "Marin", "San Francisco", "Solano", "Contra Costa", "Alameda", "Santa Clara", "San Mateo", "Santa Cruz", "San Luis Obispo", "Santa Barbara", "Ventura", "Los Angeles", "Orange", "San Diego", "Inyo")) %>%
+  select(-c(SITE.ID, SITE.NAME)) %>%
+  select(COUNTY, starts_with("X")) 
+
+#make sure it worked
+cali_data
+```
+```{r sum monarch counts per year}
+#convert numeric columns to numeric data
+numeric_cols <- colnames(cali_data)[sapply(cali_data, is.character)]
+
+cali_data[numeric_cols] <- lapply(cali_data[numeric_cols], function(x) as.numeric(gsub(",", "", x)))
+
+#sum monarch counts per year 
+cali_totals <- cali_data %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+#make sure it worked 
+cali_totals
+```
+```{r clean the cali_totals}
+#remove empty columns
+cali_totals.tidy <- cali_totals %>% select(-c(X, X.1, COUNTY))
+
+#remove x function
+remove_x <- function(name) {gsub("X", "", name)}
+
+#remove x before years
+cali_totals.tidy <- cali_totals.tidy %>% rename_with(remove_x, starts_with("X"))
+
+#make sure it worked
+cali_totals.tidy
+
+#put in long format
+cali_totals.long <- cali_totals.tidy %>%
+  pivot_longer(cols = everything(),
+               names_to = "Year", 
+               values_to = "Monarch.Count")
+#check
+cali_totals.long
+```
+```{r filter Mexico counties from WMC dataset}
+mexico_data <- WMC.data2 %>% filter(COUNTY %in% c("Monterey", "Baja California")) %>%
+  select(-c(SITE.ID, SITE.NAME))
+
+#check it 
+mexico_data
+```
+```{r tidy & sum Mexico}
+#convert to numeric
+numeric_cols <- colnames(mexico_data)[sapply(mexico_data, is.character)]
+
+mexico_data[numeric_cols] <- lapply(mexico_data[numeric_cols], function(x) as.numeric(gsub(",", "", x)))
+
+#sum counts per year
+mexico_totals <- mexico_data %>%
+  summarise(across(everything(), sum, na.rm = TRUE))
+
+#check
+mexico_totals
+
+#remove empty columns
+mexico_totals.tidy <- mexico_totals %>% select(-c(X, X.1, COUNTY))
+
+#remove x function
+remove_x <- function(name) {gsub("X", "", name)}
+
+#remove x before years
+mexico_totals.tidy <- mexico_totals.tidy %>% rename_with(remove_x, starts_with("X"))
+
+#make sure it worked
+mexico_totals.tidy
+
+#put in long format
+mexico_totals.long <- mexico_totals.tidy %>%
+  pivot_longer(cols = everything(),
+               names_to = "Year", 
+               values_to = "Monarch.Count")
+#check
+mexico_totals.long
+```
+I decided to look for a different Mexico dataset to run analyses on since the filtered data above only contains information from 2 counties in Mexico. 
+```{r read in all site data and climate data}
+MonarchAllSites <- read.csv("/Users/emilymyers/Documents/Spring24/BIO_611/ButterflyProject/MonarchAllSites.csv")
+
+CaliYearlyTemp <- read.csv("/Users/emilymyers/Documents/Spring24/BIO_611/ButterflyProject/CaliYearlyTemp.csv")
+
+MexicoYearlyTemp <- read.csv("/Users/emilymyers/Documents/Spring24/BIO_611/ButterflyProject/MexicoClimateData.csv")
+```
+
+```{r plot for MonarchAllSites}
+#remove commas from the data
+MonarchAllSites$Total.Monarchs <- as.numeric(gsub(",", "", MonarchAllSites$Total.Monarchs))
+
+#plot the Monarch Counts for all sites
+ggplot(MonarchAllSites, aes(x = Year, y = Total.Monarchs)) +
+  geom_line(color = "darkorange") +
+  labs(x = "Year", y = "Total Overwintering Monarch Counts") +
+  theme_classic(base_size = 14) +
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+```{r total monarch counts over time with sites monitored line}
+#set x axis values 
+year.breaks <- c(1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012, 2013, 2014, 2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023)
+
+#plot of monarch counts from all sites over time with line showing number of sites monitored over time 
+ggplot() +
+  geom_bar(data = MonarchAllSites, aes(x = Year, y = Total.Monarchs), stat = "identity", fill = "darkorange", color = "black", alpha = 0.5) +
+  geom_line(data = MonarchAllSites, aes(x = Year, y = Sites.Monitored * max(Total.Monarchs)/max(Sites.Monitored)), color = "black", size = 1) +
+  labs(x = "Year", y = "Total Monarch Count") +
+  scale_x_continuous(breaks = year.breaks) +
+  scale_y_continuous(name = "Total Monarch Counts", sec.axis = sec_axis(~ . * max(MonarchAllSites$Sites.Monitored) / max(MonarchAllSites$Total.Monarchs), name = "Sites Monitored", breaks = c(0, 50, 100, 150, 200, 250, 300))) +
+  theme_classic(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+```{r plot California sites overtime}
+#remove commas and make monarch counts numeric 
+cali_totals.long$Monarch.Count <- as.numeric(gsub(",", "", cali_totals.long$Monarch.Count))
+
+#make year numeric
+cali_totals.long$Year <- as.numeric(gsub(",", "", cali_totals.long$Year))
+
+#plot overwintering monarch counts in california over time (line)
+ggplot(cali_totals.long, aes(x= Year, y= Monarch.Count)) + 
+  geom_line(color = "darkorange") +
+  geom_point(size = 1, color = "orange") +
+  labs(x = "Year", y = "California Overwintering Monarch Counts") +
+  theme_classic(base_size = 14) 
+
+#bar graph 
+ggplot() + 
+  geom_bar(data = cali_totals.long, aes(x = Year, y = Monarch.Count), stat = "identity", fill = "darkorange", color = "black", alpha = 0.5) +
+  labs(x = "Year", y = "California Overwintering Monarch Counts") +
+  theme_classic(base_size = 14)
+```
+```{r plot Baja and Monterey counts over time}
+#remove commas, make monarch count numeric
+mexico_totals.long$Monarch.Count <- as.numeric(gsub(",", "", mexico_totals.long$Monarch.Count))
+
+#make year numeric
+mexico_totals.long$Year <- as.numeric(gsub(",", "", mexico_totals.long$Year))
+
+#plot overwintering counts in Baja California and Monterey Mexico over time 
+ggplot(mexico_totals.long, aes(x= Year, y= Monarch.Count)) + 
+  geom_line(color = "darkorange") +
+  geom_point(size = 1, color = "orange") +
+  labs(x = "Year", y = "Overwintering Monarch Counts 
+       (Baja California and Monterey, Mexico)") +
+  theme_classic(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+
+ggplot() + 
+  geom_bar(data = mexico_totals.long, aes(x = Year, y = Monarch.Count), stat = "identity", fill = "darkorange", color = "black", alpha = 0.5) +
+  labs(x = "Year", y = "Overwintering Monarch Counts 
+       (Baja California & Monterey, Mexico)") +
+  theme_classic(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+```{r plot cali temperature data}
+ggplot(CaliYearlyTemp, aes(x = Year, y = Mean.Temp)) +
+  geom_line(color = "darkorange") +
+  labs(x = "Year", y = expression("Mean Temperature (" * degree * "Fahrenheit)")) +
+  theme_classic(base_size = 14) +
+   theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1))
+```
+```{r merge cali climate to cali monarch counts}
+merged.cali <- merge(cali_totals.long, CaliYearlyTemp, by = "Year")
+
+#check it
+merged.cali
+```
+```{r is there an effect of cali mean temp on monarch count?}
+ #plot to see distribution of California Monarch Counts
+ggplot(merged.cali, aes(x = Monarch.Count)) +
+  geom_histogram(bins = 15, fill = "darkorange", color = "black") +
+  labs(x = "Monarch Counts", y = "Frequency") +
+  theme_classic(base_size = 14)
+
+#check the normality of the data
+shapiro.test(merged.cali$Monarch.Count) 
+```
+
+```{r calitempmodel summary}
+#use poisson (glm)
+calitempmodel<- glm(Monarch.Count ~ Mean.Temp, family = poisson, data = merged.cali)
+
+summary(calitempmodel)
+
+Anova(calitempmodel)
+```
+
+```{r plot the cali temp model}
+#plot predicted vs observed values
+calitemp.predicted <- predict(calitempmodel, type = "response")
+
+calitempmod.plotdat <- data.frame(observed = merged.cali, predicted = calitemp.predicted)
+
+ggplot(calitempmod.plotdat, aes(x = observed.Monarch.Count, y = predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "solid", color = "maroon") +
+  labs(x = "Observed", y = "Predicted", title = "Observed vs Predicted Monarch Counts") +
+  theme_classic(base_size = 14) 
+
+ggplot(calitempmodel, aes(x = Mean.Temp, y = Monarch.Count)) +
+  geom_point() +
+  geom_smooth(method = "glm", se = TRUE, color = "darkorange") +
+  labs(x =  expression("Mean Temperature (" * degree * "Fahrenheit)") , y = "Total Monarch Count") +
+  theme_classic(base_size = 14)
+```
+```{r is there a significant effect of year on monarch counts in california}
+#poisson distribution glm
+caliyearmodel <- glm(Monarch.Count ~ Year, data = cali_totals.long, family = poisson)
+
+summary(caliyearmodel)
+```
+```{r plot the cali year model}
+ggplot(caliyearmodel, aes(x = Year, y = Monarch.Count)) +
+  geom_point() +
+  geom_smooth(method = "glm", se = TRUE, color = "darkorange") +
+  labs(x = "Year", y = "Total Monarch Count") +
+  theme_classic(base_size = 14)
+```
+```{r is there a significant effect of year on Monterrey & Baja California monarch counts}
+#view distribution of data
+ggplot(mexico_totals.long, aes(x = Monarch.Count)) +
+  geom_histogram(bins = 15, fill = "darkorange", color = "black") +
+  labs(x = "Monarch Counts", y = "Frequency") +
+  theme_classic(base_size = 14)
+
+#since count data use poisson glm
+mexicoyearmodel <- glm(Monarch.Count ~ Year, data = mexico_totals.long, family = poisson)
+
+summary(mexicoyearmodel)
+
+Anova(mexicoyearmodel)
+```
+```{r plot Monterrey and Baja year model}
+ggplot(mexicoyearmodel, aes(x = Year, y = Monarch.Count)) +
+  geom_point() +
+  geom_smooth(method = "glm", se = TRUE, color = "darkorange") +
+  labs(x = "Year", y = "Total Monarch Count") +
+  theme_classic(base_size = 14)
+```
+I decided to not use the data and analyses above for the final project, since this dataset only contained monarch counts for 2 counties in Mexico. I decided to find a more comprehensive dataset to analyze for Mexico.
+
+```{r mexico overwinting data}
+#read in the data 
+mexicoHA.rawdat <- read.csv("/Users/emilymyers/Documents/Spring24/BIO_611/ButterflyProject/mexicomonarchcounts.csv")
+mexicoHA.rawdat
+
+#filter unnessary data out
+mexico.HA.filtered <- subset(mexicoHA.rawdat, select = c("year", "overwinter.ha.", "log.overwinter."))
+
+#change the year column to Year so you can merge with temp data
+mexico.HA.filtered <- mexico.HA.filtered %>% rename(Year = year)
+
+#make sure it worked
+mexico.HA.filtered 
+```
+```{r view the mexico overwintering data}
+ggplot(mexico.HA.filtered, aes(x = Year, y = overwinter.ha.)) +
+  geom_line(color = "darkorange") +
+  geom_point(size = 1, color = "orange") +
+  labs(x = "Year", y = "Mexico Overwintering Monarch Area
+       (hectares)") +
+  theme_classic(base_size = 14) +
+  scale_x_continuous(breaks = c(2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022))
+```
+```{r does overwinter count in mexico depend on year?}
+#check distribution of the data 
+ggplot(mexico.HA.filtered, aes(x = overwinter.ha.)) +
+  geom_histogram(bins = 10, fill = "darkorange", color = "black") +
+  labs(x = "Monarch Covered Area (hectares)", y = "Frequency") +
+  theme_classic(base_size = 14)
+
+shapiro.test(mexico.HA.filtered$overwinter.ha.)
+```
+
+
+```{r model}
+#since the data is normally distributed, use normal linear regression
+
+mexicoHA.year.model.lm <- lm(overwinter.ha. ~ Year, data = mexico.HA.filtered)
+
+summary(mexicoHA.year.model.lm)
+
+Anova(mexicoHA.year.model.lm)
+```
+```{r plot mexicoHA year model}
+ggplot(mexicoHA.year.model.lm, aes(x = Year, y = overwinter.ha.)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "darkorange") +
+  labs(x = "Year", y = "Total Monarch Area Covered
+       (hectares)") +
+  theme_classic(base_size = 14) +
+  scale_x_continuous(breaks = c(2008, 2010, 2012, 2014, 2016, 2018, 2020, 2022))
+```
+```{r tidy mexico yearly temp data}
+#make it long format
+MexicoYearlyTemp <- MexicoYearlyTemp %>% 
+  pivot_longer(cols = starts_with("X"), names_to = "Year", values_to = "MeanTempC")
+
+#check it 
+MexicoYearlyTemp
+
+#remove columns code and name 
+MexicoYearlyTemp.tidy <- subset(MexicoYearlyTemp, select = -c(code, name))
+
+#remove x before years
+MexicoYearlyTemp.tidy$Year <- gsub("X", "", MexicoYearlyTemp.tidy$Year)
+
+#remove the .07 after the year 
+MexicoYearlyTemp.tidy$Year <- substr(MexicoYearlyTemp.tidy$Year, 1, 4)
+
+#convert year to numeric 
+MexicoYearlyTemp.tidy$Year <- as.numeric(MexicoYearlyTemp.tidy$Year)
+
+#only keep years over 2006
+MexicoYearlyTemp.tidy <- subset(MexicoYearlyTemp.tidy, Year >= 2006)
+
+#check
+MexicoYearlyTemp.tidy
+```
+```{r merge temp data with mexicoHA data}
+merged.mexicoHA <- merge(mexico.HA.filtered, MexicoYearlyTemp.tidy, by = "Year")
+
+#check
+merged.mexicoHA
+```
+```{r mexicoHA temp model}
+#mexicoHA temperature model 
+mexicoHA.temp.mod <- lm(overwinter.ha. ~ MeanTempC, data = merged.mexicoHA)
+
+summary(mexicoHA.temp.mod)
+
+Anova(mexicoHA.temp.mod)
+```
+```{r plot mexicoHA temp model}
+ggplot(mexicoHA.temp.mod, aes(x = MeanTempC, y = overwinter.ha.)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "darkorange") +
+  labs(x = expression("Mean Temperature (" * degree * "Celsius)"), y = "Total Monarch Area Covered
+       (hectares)") +
+  theme_classic(base_size = 14)
+```
+```{r is there a correlation between population fluctuations in California and Mexico? filter}
+#filter cali_totals for just 2006 onward
+cali_totals.06 <- cali_totals.long %>% filter(Year >= 2006 & Year != 2023)
+
+#check that it worked
+cali_totals.06
+
+nrow(cali_totals.06)
+
+nrow(mexico.HA.filtered)
+
+length(cali_totals.06$Monarch.Count)
+
+length(mexico.HA.filtered$overwinter.ha.)
+```
+```{r correlation analysis }
+#correlation
+correlation.result <- cor.test(cali_totals.06$Monarch.Count, mexico.HA.filtered$overwinter.ha.)
+
+correlation.result
+
+correlation.coefficient <- cor(cali_totals.06$Monarch.Count, mexico.HA.filtered$overwinter.ha.)
+
+correlation.coefficient
+```
+```{r correlations with lags}
+#test to see if with a lag cali counts are predicting mexico counts 
+cor.test(cali_totals.06$Monarch.Count[1:16], mexico.HA.filtered$overwinter.ha.[2:17])
+
+#test to see if with a lag mexico counts are predicting cali counts 
+cor.test(cali_totals.06$Monarch.Count[2:17], mexico.HA.filtered$overwinter.ha.[1:16])
+plot(cali_totals.06$Monarch.Count[2:17], mexico.HA.filtered$overwinter.ha.[1:16])
+
+#merge data into one dataset
+merged.mexico.cali <- merge(cali_totals.06, mexico.HA.filtered, by = "Year")
+
+#check
+merged.mexico.cali
+
+#model to see if mexico counts are predicting cali counts
+library(MASS)
+mod1<-glm.nb(Monarch.Count[2:17]~overwinter.ha.[1:16], data = merged.mexico.cali)
+Anova(mod1)
+```
+
+```{r visualize the correlation }
+#plot correlation
+ggplot() +
+  geom_point(data = merged.mexico.cali, aes(x = Monarch.Count, y = overwinter.ha.), color = "orange") +
+  geom_smooth(data = merged.mexico.cali, aes(x = Monarch.Count, y = overwinter.ha.), method = "glm", color = "maroon") +
+  labs(x = "Overwinter Monarch Counts in California", y = "Overwinter Monarch Area in Mexico
+       (hectares)") +
+  theme_classic(base_size = 14) +
+  scale_x_continuous(breaks = c(0, 100000, 200000, 300000), labels = c("0", "100000", "200000", "300000")) 
+```
